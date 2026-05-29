@@ -1,0 +1,16 @@
+.claude-usage-box {
+    spacing: 10px;
+}
+
+.claude-usage-section {
+    spacing: 4px;
+}
+
+.claude-usage-label {
+    font-feature-settings: "tnum";
+}
+
+.claude-usage-high .claude-usage-label,
+.claude-usage-high .claude-usage-icon {
+    color: #e01b24;
+}
