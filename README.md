@@ -6,9 +6,16 @@ It displays the current utilization for the rolling **5-hour** and **7-day**
 windows, turns red past a configurable threshold, and shows the exact
 percentages and reset times in its dropdown menu.
 
-```
-⏰ 2%   📅 13%
-```
+<p align="center">
+  <img src="docs/indicator.png" alt="Claude Usage indicator: 2% for the 5-hour window and 20% for the 7-day window">
+</p>
+
+A compact ⏰ (5-hour) / 📅 (7-day) readout that sits in the GNOME top bar
+alongside your other system indicators:
+
+<p align="center">
+  <img src="docs/top-bar.png" alt="The Claude Usage indicator in the GNOME top bar, next to the system clock and tray icons" width="900">
+</p>
 
 ## Features
 
