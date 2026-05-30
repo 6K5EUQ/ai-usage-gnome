@@ -24,6 +24,8 @@ alongside your other system indicators:
 - Configurable refresh interval (default 600 s)
 - Dropdown menu with exact utilization + reset time per window, and a
   "Refresh now" action
+- On a failed refresh (e.g. HTTP 429), keeps showing the last good value
+  marked stale with a `+` (e.g. `31+%`) instead of `--%`
 - Adwaita preferences UI
 
 ## Requirements

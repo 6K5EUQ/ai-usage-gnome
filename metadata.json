@@ -6,6 +6,6 @@
   "url": "https://github.com/6K5EUQ/claude-usage-gnome",
   "settings-schema": "org.gnome.shell.extensions.claude-usage",
   "gettext-domain": "claude-usage@6k5euq",
-  "version": 1,
-  "version-name": "1.0.0"
+  "version": 2,
+  "version-name": "1.1.0"
 }

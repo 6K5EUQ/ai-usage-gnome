@@ -62,14 +62,14 @@ class UsageSection extends St.BoxLayout {
         this.add_child(this.label);
     }
 
-    setValue(util, high) {
+    setValue(util, high, stale) {
         if (util === null || util === undefined || Number.isNaN(util)) {
             this.label.text = '--%';
             this.remove_style_class_name('claude-usage-high');
             return;
         }
         const pct = Math.round(util);
-        this.label.text = `${pct}%`;
+        this.label.text = stale ? `${pct}+%` : `${pct}%`;
         if (pct >= high)
             this.add_style_class_name('claude-usage-high');
         else
@@ -85,7 +85,8 @@ class Indicator extends PanelMenu.Button {
         this._settings = settings;
         this._session = new Soup.Session();
         this._timeoutId = 0;
-        this._data = {five: null, seven: null, note: null};
+        this._data = {five: null, seven: null, note: null, stale: false};
+        this._last = {five: null, seven: null};
 
         const box = new St.BoxLayout({style_class: 'claude-usage-box'});
         this.add_child(box);
@@ -168,28 +169,38 @@ class Indicator extends PanelMenu.Button {
 
     _render() {
         const high = this._settings.get_int('high-threshold');
-        const {five, seven, note} = this._data;
-        this._five.setValue(five?.utilization ?? null, high);
-        this._seven.setValue(seven?.utilization ?? null, high);
+        const {five, seven, note, stale} = this._data;
+        this._five.setValue(five?.utilization ?? null, high, stale);
+        this._seven.setValue(seven?.utilization ?? null, high, stale);
 
-        if (note) {
+        // Error with no prior value to fall back on: show the reason instead.
+        if (note && five == null && seven == null) {
             this._fiveItem.label.text = `5h: ${note}`;
             this._sevenItem.label.text = '7d: --';
             return;
         }
+        const plus = stale ? '+' : '';
+        const why = stale && note ? `  (${note})` : '';
         this._fiveItem.label.text =
-            `5h: ${five?.utilization ?? '--'}%  ${_('resets')} ${this._fmtReset(five?.resets_at)}`;
+            `5h: ${five?.utilization ?? '--'}${plus}%  ${_('resets')} ${this._fmtReset(five?.resets_at)}${why}`;
         this._sevenItem.label.text =
-            `7d: ${seven?.utilization ?? '--'}%  ${_('resets')} ${this._fmtReset(seven?.resets_at)}`;
+            `7d: ${seven?.utilization ?? '--'}${plus}%  ${_('resets')} ${this._fmtReset(seven?.resets_at)}${why}`;
     }
 
     _setData(five, seven) {
-        this._data = {five, seven, note: null};
+        this._last = {five, seven};
+        this._data = {five, seven, note: null, stale: false};
         this._render();
     }
 
     _setUnavailable(note) {
-        this._data = {five: null, seven: null, note};
+        // Keep the last good values (shown stale with a '+') instead of '--%'.
+        this._data = {
+            five: this._last.five,
+            seven: this._last.seven,
+            note,
+            stale: true,
+        };
         this._render();
     }
 
