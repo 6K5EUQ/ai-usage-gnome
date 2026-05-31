@@ -10,11 +10,17 @@ percentages and reset times in its dropdown menu.
   <img src="docs/indicator.png" alt="Claude Usage indicator: 2% for the 5-hour window and 20% for the 7-day window">
 </p>
 
-A compact ⏰ (5-hour) / 📅 (7-day) readout that sits in the GNOME top bar
-alongside your other system indicators:
+A compact ⏰ (5-hour) / 📅 (7-day) readout that sits at the left of the
+GNOME top bar, clear of your other system indicators:
 
 <p align="center">
-  <img src="docs/top-bar.png" alt="The Claude Usage indicator in the GNOME top bar, next to the system clock and tray icons" width="900">
+  <img src="docs/indicator_full.png" alt="The Claude Usage indicator at the left of the GNOME top bar, with the clock centered and the system-monitor stats on the right" width="900">
+</p>
+
+…and in context on the desktop:
+
+<p align="center">
+  <img src="docs/top-bar.png" alt="The Claude Usage indicator at the left of the GNOME top bar, above a Claude Code terminal" width="900">
 </p>
 
 ## Features
