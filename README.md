@@ -34,6 +34,13 @@ GNOME top bar, clear of your other system indicators:
   marked stale with a `+` (e.g. `31+%`) instead of `--%`
 - Adwaita preferences UI
 
+Click the panel button for exact percentages, reset times, and a manual
+**Refresh now** action:
+
+<p align="center">
+  <img src="docs/setting.png" alt="The dropdown menu showing 5h and 7d utilization with their reset times, plus Refresh now and Settings actions">
+</p>
+
 ## Requirements
 
 - GNOME Shell 45–48 (developed and tested on 46)
@@ -75,6 +82,12 @@ gnome-extensions prefs claude-usage@6k5euq
 | Red threshold (%)    | 80      | Color the value red at or above this percentage  |
 | Refresh interval (s) | 600     | Poll frequency; low values risk HTTP 429         |
 | Credentials path     | (empty) | Override; empty uses `~/.claude/.credentials.json` |
+
+All settings live in the Adwaita preferences window:
+
+<p align="center">
+  <img src="docs/setting_full.png" alt="The Claude Usage preferences window with Display (show 5-hour, show 7-day, red threshold) and Behavior (refresh interval, credentials path) groups" width="560">
+</p>
 
 ## How it works
 
