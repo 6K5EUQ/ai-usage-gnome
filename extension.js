@@ -278,7 +278,7 @@ export default class ClaudeUsageExtension extends Extension {
     enable() {
         this._indicator = new Indicator(
             this.getSettings(), () => this.openPreferences());
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        Main.panel.addToStatusArea(this.uuid, this._indicator, 1, 'left');
         this._indicator.start();
     }
 
