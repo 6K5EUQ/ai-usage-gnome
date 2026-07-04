@@ -115,6 +115,8 @@ function collectJsonlFiles(path) {
 
 function findLatestCodexRateLimits(path) {
     const files = collectJsonlFiles(path);
+    let latest = null;
+
     for (const file of files) {
         const text = readTextFile(file.path);
         if (!text)
@@ -132,13 +134,21 @@ function findLatestCodexRateLimits(path) {
                 if (!rateLimits?.primary && !rateLimits?.secondary)
                     continue;
 
-                return {
+                const timestampMs = Date.parse(event?.timestamp ?? '');
+                const timestamp = Number.isNaN(timestampMs)
+                    ? Number(file.mtime) * 1000
+                    : timestampMs;
+                if (latest && timestamp < latest.sortTimestamp)
+                    continue;
+
+                latest = {
                     primary: rateLimits.primary ?? null,
                     secondary: rateLimits.secondary ?? null,
                     planType: rateLimits.plan_type ?? null,
                     limitName: rateLimits.limit_name ?? rateLimits.limit_id ?? null,
                     reachedType: rateLimits.rate_limit_reached_type ?? null,
                     timestamp: event?.timestamp ?? null,
+                    sortTimestamp: timestamp,
                 };
             } catch (e) {
                 continue;
@@ -146,7 +156,11 @@ function findLatestCodexRateLimits(path) {
         }
     }
 
-    return null;
+    if (!latest)
+        return null;
+
+    delete latest.sortTimestamp;
+    return latest;
 }
 
 function normalizeCodexWindow(window) {
@@ -286,9 +300,16 @@ class ProviderSection extends St.BoxLayout {
     }
 
     _fmtReset(iso) {
-        if (!iso)
+        if (iso === null || iso === undefined || iso === '')
             return '--';
+
         try {
+            if (typeof iso === 'number') {
+                const seconds = iso > 9999999999 ? Math.floor(iso / 1000) : iso;
+                const dt = GLib.DateTime.new_from_unix_local(seconds);
+                return dt ? dt.format('%m-%d %H:%M') : '--';
+            }
+
             const dt = GLib.DateTime.new_from_iso8601(iso, null);
             return dt ? dt.to_local().format('%m-%d %H:%M') : '--';
         } catch (e) {
