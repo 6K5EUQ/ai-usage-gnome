@@ -7,6 +7,17 @@ It displays the current utilization for the rolling **5-hour** and **7-day**
 windows for each provider, turns red past a configurable threshold, and shows
 the exact percentages and reset times in its dropdown menu.
 
+<p align="center">
+  <img src="docs/indicator.png" alt="AI Usage indicator: Claude at 2% (5-hour) and 5% (7-day), Codex at 18% (5-hour) and 3% (7-day)">
+</p>
+
+…sitting at the left of the GNOME top bar, clear of your other system
+indicators:
+
+<p align="center">
+  <img src="docs/top-bar.png" alt="The AI Usage indicator at the left of the GNOME top bar, alongside the clock and system-monitor stats" width="900">
+</p>
+
 ## Features
 
 - Claude and Codex usage side by side in the panel, each independently
@@ -20,6 +31,13 @@ the exact percentages and reset times in its dropdown menu.
 - On a failed refresh (e.g. HTTP 429), keeps showing the last good value
   marked stale with a `+` (e.g. `31+%`) instead of `--%`
 - Adwaita preferences UI
+
+Click the panel button for exact percentages, reset times, and a manual
+**Refresh now** action:
+
+<p align="center">
+  <img src="docs/setting.png" alt="The dropdown menu showing 5h and 7d utilization with their reset times per provider, plus Refresh now and Settings actions">
+</p>
 
 ## Requirements
 
@@ -71,7 +89,11 @@ gnome-extensions prefs ai-usage@6k5euq
 | Codex refresh interval (s)    | 60      | How often to re-read local Codex session logs       |
 | Credentials path              | (empty) | Override; empty uses `~/.claude/.credentials.json`  |
 
-All settings live in the Adwaita preferences window.
+All settings live in the Adwaita preferences window:
+
+<p align="center">
+  <img src="docs/setting_full.png" alt="The AI Usage preferences window with Display (show Claude/Codex, show 5-hour/7-day, red threshold), Claude (refresh interval, credentials path), and Codex (refresh interval) groups" width="700">
+</p>
 
 ## How it works
 

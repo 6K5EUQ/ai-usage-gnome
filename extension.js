@@ -180,16 +180,11 @@ function logoGicon(extensionPath, fileName) {
 
 const UsageSection = GObject.registerClass(
 class UsageSection extends St.BoxLayout {
-    _init(iconName) {
+    _init() {
         super._init({
             style_class: 'ai-usage-section',
             y_align: Clutter.ActorAlign.CENTER,
         });
-
-        this.add_child(new St.Icon({
-            style_class: 'system-status-icon ai-usage-icon',
-            icon_name: iconName,
-        }));
 
         this.label = new St.Label({
             style_class: 'ai-usage-label',
@@ -236,9 +231,10 @@ class ProviderSection extends St.BoxLayout {
             icon_size: 16,
         }));
 
-        this._five = new UsageSection('alarm-symbolic');
-        this._seven = new UsageSection('x-office-calendar-symbolic');
+        this._five = new UsageSection();
+        this._seven = new UsageSection();
         this.add_child(this._five);
+        this.add_child(new St.Widget({style_class: 'ai-usage-separator-gap'}));
         this.add_child(this._seven);
 
         this._fiveItem = new PopupMenu.PopupMenuItem(`5h: --`, {reactive: false});

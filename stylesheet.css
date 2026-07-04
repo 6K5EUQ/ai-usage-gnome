@@ -1,26 +1,30 @@
 .ai-usage-box {
-    spacing: 10px;
+    spacing: 16px;
 }
 
 .ai-usage-provider {
-    spacing: 10px;
+    spacing: 0;
 }
 
 .ai-usage-logo {
     width: 16px;
     height: 16px;
     -st-icon-style: regular;
+    margin-right: 9px;
 }
 
 .ai-usage-section {
-    spacing: 4px;
+    padding: 0 6px;
 }
 
 .ai-usage-label {
     font-feature-settings: "tnum";
 }
 
-.ai-usage-high .ai-usage-label,
-.ai-usage-high .ai-usage-icon {
+.ai-usage-separator-gap {
+    width: 3px;
+}
+
+.ai-usage-high .ai-usage-label {
     color: #e01b24;
 }
