@@ -29,6 +29,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 const CLAUDE_ENDPOINT = 'https://api.anthropic.com/api/oauth/usage';
 const CLAUDE_BETA = 'oauth-2025-04-20';
 const CODEX_MAX_SESSION_FILES = 50;
+const NET_ERROR_RETRY_SECONDS = 10;
+const NET_ERROR_MAX_RETRIES = 3;
 
 function defaultClaudeCredPath() {
     return GLib.build_filenamev([GLib.get_home_dir(), '.claude', '.credentials.json']);
@@ -222,6 +224,8 @@ class ProviderSection extends St.BoxLayout {
         this._settings = settings;
         this._provider = provider;
         this._timeoutId = 0;
+        this._retryTimeoutId = 0;
+        this._netErrorRetries = 0;
         this._data = {five: null, seven: null, note: null, stale: false};
         this._last = {five: null, seven: null};
 
@@ -246,7 +250,8 @@ class ProviderSection extends St.BoxLayout {
     }
 
     start() {
-        this._refresh();
+        this._netErrorRetries = 0;
+        this._refreshWithNetErrorRetry();
         this._scheduleRefresh();
     }
 
@@ -328,6 +333,38 @@ class ProviderSection extends St.BoxLayout {
         });
     }
 
+    // The very first refresh (right after boot/login) is retried a few
+    // times on a network error, since that's usually just the network not
+    // being up yet rather than a lasting problem. Later refreshes (manual,
+    // scheduled, or triggered by a settings change) fail straight through
+    // to the next scheduled attempt, same as before.
+    _refreshWithNetErrorRetry() {
+        this._provider.fetch(this._settings, (result, error) => {
+            if (error) {
+                this._setUnavailable(error);
+                if (error === _('net error') && this._netErrorRetries < NET_ERROR_MAX_RETRIES) {
+                    this._netErrorRetries++;
+                    this._cancelRetry();
+                    this._retryTimeoutId = GLib.timeout_add_seconds(
+                        GLib.PRIORITY_DEFAULT, NET_ERROR_RETRY_SECONDS, () => {
+                            this._retryTimeoutId = 0;
+                            this._refreshWithNetErrorRetry();
+                            return GLib.SOURCE_REMOVE;
+                        });
+                }
+                return;
+            }
+            this._setData(result.five, result.seven);
+        });
+    }
+
+    _cancelRetry() {
+        if (this._retryTimeoutId) {
+            GLib.source_remove(this._retryTimeoutId);
+            this._retryTimeoutId = 0;
+        }
+    }
+
     _setData(five, seven) {
         this._last = {five, seven};
         this._data = {five, seven, note: null, stale: false};
@@ -350,6 +387,7 @@ class ProviderSection extends St.BoxLayout {
             GLib.source_remove(this._timeoutId);
             this._timeoutId = 0;
         }
+        this._cancelRetry();
         super.destroy();
     }
 });
