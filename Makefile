@@ -1,4 +1,4 @@
-UUID    = claude-usage@6k5euq
+UUID    = ai-usage@6k5euq
 ZIP     = $(UUID).shell-extension.zip
 DESTDIR = $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 
@@ -12,7 +12,7 @@ schemas:
 
 ## Build a distributable zip (schema is compiled into the zip automatically)
 pack:
-	gnome-extensions pack --force --extra-source=LICENSE --out-dir=. .
+	gnome-extensions pack --force --extra-source=LICENSE --extra-source=icons --out-dir=. .
 
 ## Install the built zip for the current user
 install: pack

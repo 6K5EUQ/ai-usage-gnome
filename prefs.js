@@ -1,7 +1,7 @@
 /*
- * Claude Usage — preferences UI.
+ * AI Usage — preferences UI.
  *
- * Copyright (C) 2026 the Claude Usage contributors
+ * Copyright (C) 2026 the AI Usage contributors
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
@@ -11,7 +11,7 @@ import Gio from 'gi://Gio';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-export default class ClaudeUsagePreferences extends ExtensionPreferences {
+export default class AiUsagePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         const page = new Adw.PreferencesPage();
@@ -19,6 +19,14 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
         // --- Display ---
         const display = new Adw.PreferencesGroup({title: _('Display')});
         page.add(display);
+
+        const claude = new Adw.SwitchRow({title: _('Show Claude usage')});
+        display.add(claude);
+        settings.bind('show-claude', claude, 'active', Gio.SettingsBindFlags.DEFAULT);
+
+        const codex = new Adw.SwitchRow({title: _('Show Codex usage')});
+        display.add(codex);
+        settings.bind('show-codex', codex, 'active', Gio.SettingsBindFlags.DEFAULT);
 
         const five = new Adw.SwitchRow({title: _('Show 5-hour usage')});
         display.add(five);
@@ -41,32 +49,49 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
         thresholdAdj.connect('value-changed',
             () => settings.set_int('high-threshold', thresholdAdj.get_value()));
 
-        // --- Behavior ---
-        const behavior = new Adw.PreferencesGroup({title: _('Behavior')});
-        page.add(behavior);
+        // --- Claude ---
+        const claudeGroup = new Adw.PreferencesGroup({title: _('Claude')});
+        page.add(claudeGroup);
 
-        const intervalAdj = new Gtk.Adjustment({
+        const claudeIntervalAdj = new Gtk.Adjustment({
             lower: 60, upper: 3600, step_increment: 30, page_increment: 60,
-            value: settings.get_int('refresh-interval'),
+            value: settings.get_int('claude-refresh-interval'),
         });
-        const interval = new Adw.SpinRow({
+        const claudeInterval = new Adw.SpinRow({
             title: _('Refresh interval (seconds)'),
             subtitle: _('Lower values risk HTTP 429 rate limiting'),
-            adjustment: intervalAdj,
+            adjustment: claudeIntervalAdj,
         });
-        behavior.add(interval);
-        intervalAdj.connect('value-changed',
-            () => settings.set_int('refresh-interval', intervalAdj.get_value()));
+        claudeGroup.add(claudeInterval);
+        claudeIntervalAdj.connect('value-changed',
+            () => settings.set_int('claude-refresh-interval', claudeIntervalAdj.get_value()));
 
         const cred = new Adw.EntryRow({title: _('Credentials path')});
         cred.text = settings.get_string('credentials-path');
         cred.connect('changed', () => settings.set_string('credentials-path', cred.text));
-        behavior.add(cred);
+        claudeGroup.add(cred);
 
         const credHint = new Adw.ActionRow({
             subtitle: _('Leave empty to use ~/.claude/.credentials.json'),
         });
-        behavior.add(credHint);
+        claudeGroup.add(credHint);
+
+        // --- Codex ---
+        const codexGroup = new Adw.PreferencesGroup({title: _('Codex')});
+        page.add(codexGroup);
+
+        const codexIntervalAdj = new Gtk.Adjustment({
+            lower: 10, upper: 3600, step_increment: 10, page_increment: 60,
+            value: settings.get_int('codex-refresh-interval'),
+        });
+        const codexInterval = new Adw.SpinRow({
+            title: _('Refresh interval (seconds)'),
+            subtitle: _('Reads local Codex session logs'),
+            adjustment: codexIntervalAdj,
+        });
+        codexGroup.add(codexInterval);
+        codexIntervalAdj.connect('value-changed',
+            () => settings.set_int('codex-refresh-interval', codexIntervalAdj.get_value()));
 
         window.add(page);
     }

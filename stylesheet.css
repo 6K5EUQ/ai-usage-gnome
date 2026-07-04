@@ -1,16 +1,26 @@
-.claude-usage-box {
+.ai-usage-box {
     spacing: 10px;
 }
 
-.claude-usage-section {
+.ai-usage-provider {
+    spacing: 10px;
+}
+
+.ai-usage-logo {
+    width: 16px;
+    height: 16px;
+    -st-icon-style: regular;
+}
+
+.ai-usage-section {
     spacing: 4px;
 }
 
-.claude-usage-label {
+.ai-usage-label {
     font-feature-settings: "tnum";
 }
 
-.claude-usage-high .claude-usage-label,
-.claude-usage-high .claude-usage-icon {
+.ai-usage-high .ai-usage-label,
+.ai-usage-high .ai-usage-icon {
     color: #e01b24;
 }

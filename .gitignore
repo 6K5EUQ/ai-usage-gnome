@@ -13,3 +13,6 @@ schemas/gschemas.compiled
 .DS_Store
 .idea/
 .vscode/
+
+# Local copy of Claude's session memory (not project source)
+.claude-memory/

@@ -1,11 +1,11 @@
 {
-  "uuid": "claude-usage@6k5euq",
-  "name": "Claude Usage",
-  "description": "Show Claude.ai 5-hour and 7-day usage utilization in the GNOME top bar, with reset times in the menu and a configurable refresh interval and alert threshold.",
+  "uuid": "ai-usage@6k5euq",
+  "name": "AI Usage",
+  "description": "Show Claude.ai and Codex 5-hour and 7-day usage utilization in the GNOME top bar, with reset times in the menu and configurable refresh intervals and alert threshold.",
   "shell-version": ["45", "46", "47", "48"],
-  "url": "https://github.com/6K5EUQ/claude-usage-gnome",
-  "settings-schema": "org.gnome.shell.extensions.claude-usage",
-  "gettext-domain": "claude-usage@6k5euq",
-  "version": 3,
-  "version-name": "1.2.0"
+  "url": "https://github.com/6K5EUQ/ai-usage-gnome",
+  "settings-schema": "org.gnome.shell.extensions.ai-usage",
+  "gettext-domain": "ai-usage@6k5euq",
+  "version": 1,
+  "version-name": "1.0.0"
 }

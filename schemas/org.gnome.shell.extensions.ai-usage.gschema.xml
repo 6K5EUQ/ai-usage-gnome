@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.ai-usage"
+          path="/org/gnome/shell/extensions/ai-usage/">
+
+    <key name="high-threshold" type="i">
+      <default>80</default>
+      <range min="1" max="100"/>
+      <summary>Red threshold (percent)</summary>
+      <description>Color the value red at or above this utilization percentage.</description>
+    </key>
+
+    <key name="show-five-hour" type="b">
+      <default>true</default>
+      <summary>Show 5-hour usage</summary>
+    </key>
+
+    <key name="show-seven-day" type="b">
+      <default>true</default>
+      <summary>Show 7-day usage</summary>
+    </key>
+
+    <key name="show-claude" type="b">
+      <default>true</default>
+      <summary>Show Claude usage</summary>
+    </key>
+
+    <key name="show-codex" type="b">
+      <default>true</default>
+      <summary>Show Codex usage</summary>
+    </key>
+
+    <key name="claude-refresh-interval" type="i">
+      <default>600</default>
+      <range min="60" max="3600"/>
+      <summary>Claude refresh interval (seconds)</summary>
+      <description>How often to poll the Claude usage endpoint. Low values risk HTTP 429 rate limiting.</description>
+    </key>
+
+    <key name="codex-refresh-interval" type="i">
+      <default>60</default>
+      <range min="10" max="3600"/>
+      <summary>Codex refresh interval (seconds)</summary>
+      <description>How often to read local Codex session logs.</description>
+    </key>
+
+    <key name="credentials-path" type="s">
+      <default>''</default>
+      <summary>Claude credentials file path</summary>
+      <description>Path to the Claude credentials JSON. Empty means ~/.claude/.credentials.json.</description>
+    </key>
+
+  </schema>
+</schemalist>
