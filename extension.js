@@ -28,24 +28,191 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const CLAUDE_ENDPOINT = 'https://api.anthropic.com/api/oauth/usage';
 const CLAUDE_BETA = 'oauth-2025-04-20';
+const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
+const CLAUDE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
+const CLAUDE_TOKEN_MARGIN_MS = 60 * 1000;
 const CODEX_MAX_SESSION_FILES = 50;
 const NET_ERROR_RETRY_SECONDS = 10;
 const NET_ERROR_MAX_RETRIES = 3;
+const HUB_POLL_SECONDS = 30;
+const HUB_TIMEOUT_SECONDS = 15;
 
 function defaultClaudeCredPath() {
     return GLib.build_filenamev([GLib.get_home_dir(), '.claude', '.credentials.json']);
 }
 
-function readClaudeToken(path) {
+function readClaudeCreds(path) {
     try {
         const [ok, bytes] = Gio.File.new_for_path(path).load_contents(null);
         if (!ok)
             return null;
-        const j = JSON.parse(new TextDecoder().decode(bytes));
-        return j?.claudeAiOauth?.accessToken ?? null;
+        const root = JSON.parse(new TextDecoder().decode(bytes));
+        return root?.claudeAiOauth?.accessToken ? root : null;
     } catch (e) {
         return null;
     }
+}
+
+function writeClaudeCreds(path, root) {
+    try {
+        Gio.File.new_for_path(path).replace_contents(
+            new TextEncoder().encode(JSON.stringify(root)), null, false,
+            Gio.FileCreateFlags.PRIVATE | Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function claudeTokenExpired(oauth) {
+    return Number(oauth.expiresAt) - Date.now() < CLAUDE_TOKEN_MARGIN_MS;
+}
+
+// The refresh token rotates on every use, so concurrent refreshes would burn
+// it: only one runs at a time and the others wait for its result. The new
+// tokens are written back to the credentials file so Claude Code stays
+// logged in; the file is re-read first in case Claude Code refreshed it.
+let claudeRefreshWaiters = null;
+
+function refreshClaudeToken(session, credPath, cb) {
+    if (claudeRefreshWaiters) {
+        claudeRefreshWaiters.push(cb);
+        return;
+    }
+    claudeRefreshWaiters = [cb];
+    const done = (token, error) => {
+        const waiters = claudeRefreshWaiters;
+        claudeRefreshWaiters = null;
+        waiters.forEach(f => f(token, error));
+    };
+
+    const root = readClaudeCreds(credPath);
+    const oauth = root?.claudeAiOauth;
+    if (!oauth) {
+        done(null, _('no token'));
+        return;
+    }
+    if (!claudeTokenExpired(oauth)) {
+        done(oauth.accessToken, null);
+        return;
+    }
+    if (!oauth.refreshToken) {
+        done(null, _('login needed'));
+        return;
+    }
+
+    const msg = Soup.Message.new('POST', CLAUDE_TOKEN_URL);
+    msg.get_request_headers().append('User-Agent', 'claude-cli');
+    msg.set_request_body_from_bytes('application/json', new GLib.Bytes(
+        new TextEncoder().encode(JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: oauth.refreshToken,
+            client_id: CLAUDE_CLIENT_ID,
+            scope: (oauth.scopes ?? []).join(' '),
+        }))));
+
+    session.send_and_read_async(
+        msg, GLib.PRIORITY_DEFAULT, null, (sess, res) => {
+            let bytes;
+            try {
+                bytes = sess.send_and_read_finish(res);
+            } catch (e) {
+                done(null, _('net error'));
+                return;
+            }
+
+            const status = messageStatus(msg);
+            if (status !== 200) {
+                done(null, status === 400 || status === 401 ? _('login needed') : `HTTP ${status}`);
+                return;
+            }
+
+            let j;
+            try {
+                j = JSON.parse(new TextDecoder().decode(bytes.get_data()));
+            } catch (e) {
+                done(null, _('parse error'));
+                return;
+            }
+            if (!j?.access_token) {
+                done(null, _('parse error'));
+                return;
+            }
+
+            oauth.accessToken = j.access_token;
+            oauth.expiresAt = Date.now() + Number(j.expires_in) * 1000;
+            if (j.refresh_token)
+                oauth.refreshToken = j.refresh_token;
+            if (j.refresh_token_expires_in)
+                oauth.refreshTokenExpiresAt = Date.now() + Number(j.refresh_token_expires_in) * 1000;
+            if (!writeClaudeCreds(credPath, root)) {
+                done(null, _('save error'));
+                return;
+            }
+            done(oauth.accessToken, null);
+        });
+}
+
+function hubAddress(settings) {
+    return settings.get_string('hub-address').trim();
+}
+
+// GJS throws "<code> is not a valid value for enumeration Status" for HTTP
+// codes outside the Soup.Status enum (e.g. 429 rate limit), so read the
+// status defensively.
+function messageStatus(msg) {
+    try {
+        return msg.get_status();
+    } catch (e) {
+        const m = /\b(\d{3})\b/.exec(e.message ?? '');
+        return m ? Number(m[1]) : 0;
+    }
+}
+
+// Client mode: read one provider's usage from the hub PC's extension.
+function fetchFromHub(session, settings, key, cb) {
+    const msg = Soup.Message.new(
+        'GET', `http://${hubAddress(settings)}:${settings.get_int('hub-port')}/usage`);
+    if (!msg) {
+        cb(null, _('bad hub address'));
+        return;
+    }
+
+    session.send_and_read_async(
+        msg, GLib.PRIORITY_DEFAULT, null, (sess, res) => {
+            let bytes;
+            try {
+                bytes = sess.send_and_read_finish(res);
+            } catch (e) {
+                cb(null, _('net error'));
+                return;
+            }
+
+            const status = messageStatus(msg);
+            if (status !== 200) {
+                cb(null, `HTTP ${status}`);
+                return;
+            }
+
+            let entry;
+            try {
+                entry = JSON.parse(new TextDecoder().decode(bytes.get_data()))?.[key];
+            } catch (e) {
+                cb(null, _('parse error'));
+                return;
+            }
+            if (!entry) {
+                cb(null, _('no data'));
+                return;
+            }
+
+            cb({
+                five: entry.five ?? null,
+                seven: entry.seven ?? null,
+                stale: !!entry.stale,
+                note: entry.note ?? null,
+            }, null);
+        });
 }
 
 function codexSessionsPath() {
@@ -278,7 +445,7 @@ class ProviderSection extends St.BoxLayout {
             GLib.source_remove(this._timeoutId);
             this._timeoutId = 0;
         }
-        const interval = this._settings.get_int(this._provider.intervalKey);
+        const interval = this._provider.interval(this._settings);
         this._timeoutId = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT, interval, () => {
                 this._refresh();
@@ -350,7 +517,7 @@ class ProviderSection extends St.BoxLayout {
                 this._setUnavailable(error);
                 return;
             }
-            this._setData(result.five, result.seven);
+            this._setData(result.five, result.seven, result.stale, result.note);
         });
     }
 
@@ -375,7 +542,7 @@ class ProviderSection extends St.BoxLayout {
                 }
                 return;
             }
-            this._setData(result.five, result.seven);
+            this._setData(result.five, result.seven, result.stale, result.note);
         });
     }
 
@@ -386,10 +553,15 @@ class ProviderSection extends St.BoxLayout {
         }
     }
 
-    _setData(five, seven) {
+    _setData(five, seven, stale = false, note = null) {
         this._last = {five, seven};
-        this._data = {five, seven, note: null, stale: false};
+        this._data = {five, seven, note: stale ? note : null, stale};
         this.render();
+    }
+
+    snapshot() {
+        const {five, seven, note, stale} = this._data;
+        return {five, seven, note, stale};
     }
 
     _setUnavailable(note) {
@@ -416,73 +588,89 @@ class ProviderSection extends St.BoxLayout {
 function makeClaudeProvider(session) {
     return {
         showKey: 'show-claude',
-        intervalKey: 'claude-refresh-interval',
+        interval: settings => hubAddress(settings)
+            ? HUB_POLL_SECONDS : settings.get_int('claude-refresh-interval'),
         logo: 'claude-logo.svg',
         fiveLabel: () => '5h',
         sevenLabel: () => '7d',
         fetch(settings, cb) {
+            if (hubAddress(settings)) {
+                fetchFromHub(session, settings, 'claude', cb);
+                return;
+            }
+
             const p = settings.get_string('credentials-path');
             const credPath = p && p.length ? p : defaultClaudeCredPath();
-            const token = readClaudeToken(credPath);
-            if (!token) {
+            const root = readClaudeCreds(credPath);
+            if (!root) {
                 cb(null, _('no token'));
                 return;
             }
 
-            const msg = Soup.Message.new('GET', CLAUDE_ENDPOINT);
-            const h = msg.get_request_headers();
-            h.append('Authorization', 'Bearer ' + token);
-            h.append('anthropic-beta', CLAUDE_BETA);
-            h.append('anthropic-version', '2023-06-01');
-            h.append('User-Agent', 'claude-cli');
-
-            session.send_and_read_async(
-                msg, GLib.PRIORITY_DEFAULT, null, (sess, res) => {
-                    let bytes;
-                    try {
-                        bytes = sess.send_and_read_finish(res);
-                    } catch (e) {
-                        cb(null, _('net error'));
-                        return;
-                    }
-
-                    // GJS throws "<code> is not a valid value for enumeration
-                    // Status" for HTTP codes outside the Soup.Status enum
-                    // (e.g. 429 rate limit), so read the status defensively.
-                    let status;
-                    try {
-                        status = msg.get_status();
-                    } catch (e) {
-                        const m = /\b(\d{3})\b/.exec(e.message ?? '');
-                        status = m ? Number(m[1]) : 0;
-                    }
-                    if (status !== 200) {
-                        cb(null, status === 429 ? _('rate limited') : `HTTP ${status}`);
-                        return;
-                    }
-
-                    let j;
-                    try {
-                        j = JSON.parse(new TextDecoder().decode(bytes.get_data()));
-                    } catch (e) {
-                        cb(null, _('parse error'));
-                        return;
-                    }
-
-                    cb({five: j?.five_hour ?? null, seven: j?.seven_day ?? null}, null);
+            if (claudeTokenExpired(root.claudeAiOauth)) {
+                refreshClaudeToken(session, credPath, (token, error) => {
+                    if (error)
+                        cb(null, error);
+                    else
+                        fetchClaudeUsage(session, token, cb);
                 });
+                return;
+            }
+            fetchClaudeUsage(session, root.claudeAiOauth.accessToken, cb);
         },
     };
 }
 
-function makeCodexProvider() {
+function fetchClaudeUsage(session, token, cb) {
+    const msg = Soup.Message.new('GET', CLAUDE_ENDPOINT);
+    const h = msg.get_request_headers();
+    h.append('Authorization', 'Bearer ' + token);
+    h.append('anthropic-beta', CLAUDE_BETA);
+    h.append('anthropic-version', '2023-06-01');
+    h.append('User-Agent', 'claude-cli');
+
+    session.send_and_read_async(
+        msg, GLib.PRIORITY_DEFAULT, null, (sess, res) => {
+            let bytes;
+            try {
+                bytes = sess.send_and_read_finish(res);
+            } catch (e) {
+                cb(null, _('net error'));
+                return;
+            }
+
+            const status = messageStatus(msg);
+            if (status !== 200) {
+                cb(null, status === 429 ? _('rate limited') : `HTTP ${status}`);
+                return;
+            }
+
+            let j;
+            try {
+                j = JSON.parse(new TextDecoder().decode(bytes.get_data()));
+            } catch (e) {
+                cb(null, _('parse error'));
+                return;
+            }
+
+            cb({five: j?.five_hour ?? null, seven: j?.seven_day ?? null}, null);
+        });
+}
+
+function makeCodexProvider(session) {
     return {
         showKey: 'show-codex',
-        intervalKey: 'codex-refresh-interval',
+        interval: settings => hubAddress(settings)
+            ? HUB_POLL_SECONDS : settings.get_int('codex-refresh-interval'),
         logo: 'chatgpt-logo.svg',
         fiveLabel: window => codexWindowLabel(window, '5h'),
         sevenLabel: window => codexWindowLabel(window, '7d'),
         fetch(settings, cb) {
+            if (hubAddress(settings)) {
+                fetchFromHub(session, settings, 'codex', cb);
+                return;
+            }
+
             const rateLimits = findLatestCodexRateLimits(codexSessionsPath());
             if (!rateLimits) {
                 cb(null, _('no rate limits'));
@@ -502,7 +690,7 @@ class Indicator extends PanelMenu.Button {
         super._init(0.5, 'AI Usage');
 
         this._settings = settings;
-        this._session = new Soup.Session();
+        this._session = new Soup.Session({timeout: HUB_TIMEOUT_SECONDS});
 
         const box = new St.BoxLayout({style_class: 'ai-usage-box'});
         this.add_child(box);
@@ -514,7 +702,7 @@ class Indicator extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         this._codex = new ProviderSection(
-            settings, extensionPath, this.menu, makeCodexProvider());
+            settings, extensionPath, this.menu, makeCodexProvider(this._session));
         box.add_child(this._codex);
 
         this._providers = [this._claude, this._codex];
@@ -530,10 +718,49 @@ class Indicator extends PanelMenu.Button {
 
     start() {
         this._providers.forEach(p => p.start());
+        this._startServer();
+    }
+
+    // Hub mode: serve both providers' current readings to other PCs.
+    _startServer() {
+        this._stopServer();
+        if (!this._settings.get_boolean('serve-hub'))
+            return;
+
+        const server = new Soup.Server();
+        server.add_handler('/usage', (_srv, msg) => {
+            const body = JSON.stringify({
+                claude: this._claude.snapshot(),
+                codex: this._codex.snapshot(),
+            });
+            msg.set_status(Soup.Status.OK, null);
+            msg.set_response('application/json', Soup.MemoryUse.COPY,
+                new TextEncoder().encode(body));
+        });
+        try {
+            server.listen_all(this._settings.get_int('hub-port'), 0);
+            this._server = server;
+        } catch (e) {
+            logError(e, 'AI Usage: hub server failed to start');
+        }
+    }
+
+    _stopServer() {
+        if (this._server) {
+            this._server.disconnect();
+            this._server = null;
+        }
     }
 
     _refreshAll() {
         this._providers.forEach(p => p.refresh());
+    }
+
+    _reloadProviders() {
+        this._providers.forEach(p => {
+            p.scheduleRefresh();
+            p.refresh();
+        });
     }
 
     _onSettingsChanged(key) {
@@ -556,6 +783,16 @@ class Indicator extends PanelMenu.Button {
         case 'credentials-path':
             this._claude.refresh();
             break;
+        case 'serve-hub':
+            this._startServer();
+            break;
+        case 'hub-port':
+            this._startServer();
+            this._reloadProviders();
+            break;
+        case 'hub-address':
+            this._reloadProviders();
+            break;
         }
     }
 
@@ -564,6 +801,7 @@ class Indicator extends PanelMenu.Button {
             this._settings.disconnect(this._settingsChangedId);
             this._settingsChangedId = 0;
         }
+        this._stopServer();
         this._providers.forEach(p => p.destroy());
         if (this._session) {
             this._session.abort();

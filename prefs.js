@@ -93,6 +93,28 @@ export default class AiUsagePreferences extends ExtensionPreferences {
         codexIntervalAdj.connect('value-changed',
             () => settings.set_int('codex-refresh-interval', codexIntervalAdj.get_value()));
 
+        // --- Hub ---
+        const hubGroup = new Adw.PreferencesGroup({title: _('Hub')});
+        page.add(hubGroup);
+
+        const serve = new Adw.SwitchRow({title: _('Serve to other PCs')});
+        hubGroup.add(serve);
+        settings.bind('serve-hub', serve, 'active', Gio.SettingsBindFlags.DEFAULT);
+
+        const hubAddr = new Adw.EntryRow({title: _('Hub address')});
+        hubAddr.text = settings.get_string('hub-address');
+        hubAddr.connect('changed', () => settings.set_string('hub-address', hubAddr.text));
+        hubGroup.add(hubAddr);
+
+        const hubPortAdj = new Gtk.Adjustment({
+            lower: 1024, upper: 65535, step_increment: 1, page_increment: 100,
+            value: settings.get_int('hub-port'),
+        });
+        const hubPort = new Adw.SpinRow({title: _('Port'), adjustment: hubPortAdj});
+        hubGroup.add(hubPort);
+        hubPortAdj.connect('value-changed',
+            () => settings.set_int('hub-port', hubPortAdj.get_value()));
+
         window.add(page);
     }
 }

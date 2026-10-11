@@ -101,6 +101,12 @@ All settings live in the Adwaita preferences window:
 — the same endpoint the Claude Code `/usage` command uses — authenticated
 with the OAuth access token read from `~/.claude/.credentials.json`.
 
+When the access token has expired (it lasts about 8 hours and is only renewed
+while Claude Code runs), the extension renews it itself with the refresh token
+from the same file and writes the new tokens back, so usage keeps updating
+without Claude Code running. If the refresh token is no longer valid, the menu
+shows `login needed`; run `claude` and log in again.
+
 > **Note:** this is an *undocumented* internal endpoint. It may change or stop
 > working on any Claude Code / API update.
 
@@ -112,8 +118,9 @@ token is used.
 ## Privacy & security
 
 - The extension reads your Claude token only from your local credentials
-  file and sends it **only** to Anthropic's own API, over HTTPS, to fetch
-  your usage.
+  file and sends it **only** to Anthropic's own endpoints, over HTTPS, to
+  fetch your usage and to renew it. Renewed tokens are written back to that
+  same file.
 - Codex usage is read entirely from local session logs; no network request
   is made for it.
 - No token, account data, or telemetry is sent anywhere else, stored by the

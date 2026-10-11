@@ -50,5 +50,23 @@
       <description>Path to the Claude credentials JSON. Empty means ~/.claude/.credentials.json.</description>
     </key>
 
+    <key name="serve-hub" type="b">
+      <default>false</default>
+      <summary>Serve usage to other PCs</summary>
+      <description>Run a small HTTP server exposing the current Claude and Codex usage at /usage.</description>
+    </key>
+
+    <key name="hub-address" type="s">
+      <default>''</default>
+      <summary>Hub address</summary>
+      <description>Host or IP of the PC serving usage. Empty means fetch usage locally.</description>
+    </key>
+
+    <key name="hub-port" type="i">
+      <default>8765</default>
+      <range min="1024" max="65535"/>
+      <summary>Hub port</summary>
+    </key>
+
   </schema>
 </schemalist>
