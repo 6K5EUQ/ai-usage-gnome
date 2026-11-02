@@ -28,6 +28,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const CLAUDE_ENDPOINT = 'https://api.anthropic.com/api/oauth/usage';
 const CLAUDE_BETA = 'oauth-2025-04-20';
+const CLAUDE_PROFILE_ENDPOINT = 'https://api.anthropic.com/api/oauth/profile';
+const CLAUDE_PROFILE_TTL_SECONDS = 3600;
 const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const CLAUDE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 const CLAUDE_TOKEN_MARGIN_MS = 60 * 1000;
@@ -209,6 +211,7 @@ function fetchFromHub(session, settings, key, cb) {
             cb({
                 five: entry.five ?? null,
                 seven: entry.seven ?? null,
+                fiveText: entry.fiveText ?? null,
                 stale: !!entry.stale,
                 note: entry.note ?? null,
             }, null);
@@ -377,7 +380,12 @@ class UsageSection extends St.BoxLayout {
         this.add_child(this.label);
     }
 
-    setValue(util, high, stale) {
+    setValue(util, high, stale, text = null) {
+        if (text) {
+            this.label.text = text;
+            this.remove_style_class_name('ai-usage-high');
+            return;
+        }
         if (util === null || util === undefined || Number.isNaN(util)) {
             this.label.text = '--%';
             this.remove_style_class_name('ai-usage-high');
@@ -407,7 +415,7 @@ class ProviderSection extends St.BoxLayout {
         this._timeoutId = 0;
         this._retryTimeoutId = 0;
         this._netErrorRetries = 0;
-        this._data = {five: null, seven: null, note: null, stale: false};
+        this._data = {five: null, seven: null, fiveText: null, note: null, stale: false};
         this._last = {five: null, seven: null};
 
         this.add_child(new St.Icon({
@@ -486,8 +494,8 @@ class ProviderSection extends St.BoxLayout {
 
     render() {
         const high = this._settings.get_int('high-threshold');
-        const {five, seven, note, stale} = this._data;
-        this._five.setValue(five?.utilization ?? null, high, stale);
+        const {five, seven, fiveText, note, stale} = this._data;
+        this._five.setValue(five?.utilization ?? null, high, stale, fiveText);
         this._seven.setValue(seven?.utilization ?? null, high, stale);
 
         const fiveLabel = this._provider.fiveLabel(five);
@@ -501,8 +509,9 @@ class ProviderSection extends St.BoxLayout {
         }
         const plus = stale ? '+' : '';
         const why = stale && note ? `  (${note})` : '';
-        this._fiveItem.label.text =
-            `${fiveLabel}: ${five?.utilization ?? '--'}${plus}%  ${_('resets')} ${this._fmtReset(five?.resets_at)}${why}`;
+        this._fiveItem.label.text = fiveText
+            ? `${fiveLabel}: ${fiveText}`
+            : `${fiveLabel}: ${five?.utilization ?? '--'}${plus}%  ${_('resets')} ${this._fmtReset(five?.resets_at)}${why}`;
         this._sevenItem.label.text =
             `${sevenLabel}: ${seven?.utilization ?? '--'}${plus}%  ${_('resets')} ${this._fmtReset(seven?.resets_at)}${why}`;
     }
@@ -517,7 +526,7 @@ class ProviderSection extends St.BoxLayout {
                 this._setUnavailable(error);
                 return;
             }
-            this._setData(result.five, result.seven, result.stale, result.note);
+            this._setData(result.five, result.seven, result.stale, result.note, result.fiveText);
         });
     }
 
@@ -542,7 +551,7 @@ class ProviderSection extends St.BoxLayout {
                 }
                 return;
             }
-            this._setData(result.five, result.seven, result.stale, result.note);
+            this._setData(result.five, result.seven, result.stale, result.note, result.fiveText);
         });
     }
 
@@ -553,15 +562,15 @@ class ProviderSection extends St.BoxLayout {
         }
     }
 
-    _setData(five, seven, stale = false, note = null) {
-        this._last = {five, seven};
-        this._data = {five, seven, note: stale ? note : null, stale};
+    _setData(five, seven, stale = false, note = null, fiveText = null) {
+        this._last = {five, seven, fiveText};
+        this._data = {five, seven, fiveText, note: stale ? note : null, stale};
         this.render();
     }
 
     snapshot() {
-        const {five, seven, note, stale} = this._data;
-        return {five, seven, note, stale};
+        const {five, seven, fiveText, note, stale} = this._data;
+        return {five, seven, fiveText, note, stale};
     }
 
     _setUnavailable(note) {
@@ -569,6 +578,7 @@ class ProviderSection extends St.BoxLayout {
         this._data = {
             five: this._last.five,
             seven: this._last.seven,
+            fiveText: this._last.fiveText,
             note,
             stale: true,
         };
@@ -621,6 +631,39 @@ function makeClaudeProvider(session) {
     };
 }
 
+// Plan name from the profile endpoint (the credentials file keeps the plan
+// from login time and goes stale). Cached for an hour; on failure the last
+// known plan is kept.
+let claudePlan = null;
+let claudePlanFetchedAt = 0;
+
+function getClaudePlan(session, token, cb) {
+    const now = GLib.get_monotonic_time() / 1e6;
+    if (claudePlanFetchedAt && now - claudePlanFetchedAt < CLAUDE_PROFILE_TTL_SECONDS) {
+        cb(claudePlan);
+        return;
+    }
+    const msg = Soup.Message.new('GET', CLAUDE_PROFILE_ENDPOINT);
+    const h = msg.get_request_headers();
+    h.append('Authorization', 'Bearer ' + token);
+    h.append('anthropic-beta', CLAUDE_BETA);
+    h.append('User-Agent', 'claude-cli');
+    session.send_and_read_async(
+        msg, GLib.PRIORITY_DEFAULT, null, (sess, res) => {
+            try {
+                const bytes = sess.send_and_read_finish(res);
+                if (messageStatus(msg) === 200) {
+                    const j = JSON.parse(new TextDecoder().decode(bytes.get_data()));
+                    claudePlan = j?.organization?.plan_display_name ?? null;
+                    claudePlanFetchedAt = now;
+                }
+            } catch (e) {
+                // keep last known plan
+            }
+            cb(claudePlan);
+        });
+}
+
 function fetchClaudeUsage(session, token, cb) {
     const msg = Soup.Message.new('GET', CLAUDE_ENDPOINT);
     const h = msg.get_request_headers();
@@ -653,7 +696,13 @@ function fetchClaudeUsage(session, token, cb) {
                 return;
             }
 
-            cb({five: j?.five_hour ?? null, seven: j?.seven_day ?? null}, null);
+            const five = j?.five_hour ?? null;
+            const seven = j?.seven_day ?? null;
+            getClaudePlan(session, token, plan => {
+                // Ultra has no 5-hour limit (verified accounts).
+                const fiveText = plan === 'Ultra' && five == null ? 'Ultra' : null;
+                cb({five, seven, fiveText}, null);
+            });
         });
 }
 
